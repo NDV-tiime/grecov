@@ -1,0 +1,24 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "grecov"
+version = "0.1.0"
+description = "Exact confidence intervals for multinomial distributions via Neyman construction"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.scikit-build]
+wheel.packages = ["src/grecov"]
+cmake.build-type = "Release"
+
+[tool.scikit-build.cmake.define]
+CMAKE_INTERPROCEDURAL_OPTIMIZATION = "ON"
