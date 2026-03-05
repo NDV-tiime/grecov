@@ -10,4 +10,13 @@ nanobind_add_module(_ext src/ext/grecov_ext.cpp)
 
 target_compile_features(_ext PRIVATE cxx_std_17)
 
+option(GRECOV_PROFILE "Build with profiling symbols and frame pointers" OFF)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(_ext PRIVATE -march=native -ffast-math)
+  if(GRECOV_PROFILE)
+    target_compile_options(_ext PRIVATE -g -fno-omit-frame-pointer -fno-optimize-sibling-calls)
+  endif()
+endif()
+
 install(TARGETS _ext LIBRARY DESTINATION grecov)
