@@ -4,6 +4,7 @@ Uses p vectors extracted from a real solver run (confidence_interval with
 counts=[30,25,20,15,10], values=[0,1,2,3,4], alpha=0.05).
 """
 
+import argparse
 import timeit
 
 from grecov._ext import grecov_bfs, grecov_mass_bfs
@@ -85,6 +86,47 @@ def bench_mass_bfs():
             print(f"{name:<12} {_fmt_time(t)} {res['states_explored']:>10}")
 
 
+def bench_solver():
+    from grecov.solver import confidence_interval
+
+    test_cases = [
+        {
+            "counts": [30, 25, 20, 15, 10],
+            "values": [0, 1, 2, 3, 4],
+            "label": "k=5 n=100",
+        },
+        {"counts": [15, 12, 10, 8, 5], "values": [0, 1, 2, 3, 4], "label": "k=5 n=50"},
+        {"counts": [8, 6, 4, 2], "values": [0, 1, 2, 3], "label": "k=4 n=20"},
+    ]
+
+    print("\n=== Full solver (confidence_interval, equal_tail) ===")
+    print(f"{'case':<16} {'time':>12} {'bfs_calls':>10} {'bfs_states':>12}")
+    print("-" * 52)
+    for tc in test_cases:
+        res = confidence_interval(tc["counts"], tc["values"], alpha=0.05)
+        t = _auto_bench(
+            lambda tc=tc: confidence_interval(tc["counts"], tc["values"], alpha=0.05)
+        )
+        print(
+            f"{tc['label']:<16} {_fmt_time(t)} {res['bfs_calls']:>10} {res['bfs_total_states']:>12}"
+        )
+        print(f"  CI: [{res['lower']:.6f}, {res['upper']:.6f}]")
+
+
 if __name__ == "__main__":
-    bench_tail_bfs()
-    bench_mass_bfs()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bfs", action="store_true", help="Run BFS microbenchmarks")
+    parser.add_argument(
+        "--solver", action="store_true", help="Run full solver benchmark"
+    )
+    parser.add_argument("--all", action="store_true", help="Run all benchmarks")
+    args = parser.parse_args()
+
+    if args.all or (not args.bfs and not args.solver):
+        args.bfs = args.solver = True
+
+    if args.bfs:
+        bench_tail_bfs()
+        bench_mass_bfs()
+    if args.solver:
+        bench_solver()
