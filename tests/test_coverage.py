@@ -11,7 +11,6 @@ import pytest
 
 from grecov.solver import confidence_interval
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -107,7 +106,7 @@ def test_equal_tail_coverage(k, n, p, values, alpha):
 def test_mass_coverage(k, n, p, values, alpha):
     np.random.seed(42)
     coverage = _check_coverage(p, values, n, alpha, method="mass")
-    assert coverage >= 1 - alpha - 0.02, (
+    assert coverage >= 1 - alpha, (
         f"Coverage {coverage:.6f} < {1 - alpha} for k={k}, n={n}, "
         f"p=[{', '.join(f'{pi:.3f}' for pi in p)}], alpha={alpha}"
     )
