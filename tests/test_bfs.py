@@ -7,6 +7,11 @@ from grecov._ext import grecov_mass_bfs as cpp_mass_bfs  # type: ignore
 from grecov.bfs import grecov_bfs as py_bfs
 from grecov.bfs import grecov_mass_bfs as py_mass_bfs
 
+# Both Python and C++ use the same math (std::exp / math.exp).
+# Floating-point accumulation order differs, so allow small absolute tolerance
+# that scales with n for large-n cases.
+ATOL = 1e-12
+
 # ── Test cases ───────────────────────────────────────────────────────
 
 BFS_CASES = [
@@ -67,9 +72,8 @@ def test_grecov_bfs_match(p, v, counts):
     assert r_py["states_explored"] == r_cpp["states_explored"], (
         f"states_explored mismatch: py={r_py['states_explored']} cpp={r_cpp['states_explored']}"
     )
-    # Larger n accumulates more floating-point error; scale tolerance accordingly
-    tol = max(1e-12, n * 1e-13)
-    tol2 = max(1e-10, n * n * 1e-13)
+    tol = max(ATOL, n * 1e-13)
+    tol2 = max(ATOL, n * n * 1e-13)
     assert r_py["prob_left"] == pytest.approx(r_cpp["prob_left"], abs=tol)
     assert r_py["prob_right"] == pytest.approx(r_cpp["prob_right"], abs=tol)
     assert r_py["explored_mass"] == pytest.approx(r_cpp["explored_mass"], abs=tol)
@@ -104,7 +108,7 @@ def test_grecov_mass_bfs_match(p, x_obs):
     assert r_py["states_explored"] == r_cpp["states_explored"], (
         f"states_explored mismatch: py={r_py['states_explored']} cpp={r_cpp['states_explored']}"
     )
-    assert r_py["explored_mass"] == pytest.approx(r_cpp["explored_mass"], abs=1e-12)
+    assert r_py["explored_mass"] == pytest.approx(r_cpp["explored_mass"], abs=ATOL)
 
 
 @pytest.mark.parametrize("tie_margin", [1e-2, 1e-4, 1e-8, 1e-12])
@@ -117,7 +121,7 @@ def test_mass_bfs_tie_margins(tie_margin):
     r_cpp = cpp_mass_bfs(p, x_obs, eps=1e-3, tie_margin=tie_margin)
 
     assert r_py["states_explored"] == r_cpp["states_explored"]
-    assert r_py["explored_mass"] == pytest.approx(r_cpp["explored_mass"], abs=1e-12)
+    assert r_py["explored_mass"] == pytest.approx(r_cpp["explored_mass"], abs=ATOL)
 
 
 def test_mass_bfs_at_mode():

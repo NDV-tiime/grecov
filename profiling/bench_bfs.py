@@ -2,9 +2,16 @@
 
 Uses p vectors extracted from a real solver run (confidence_interval with
 counts=[30,25,20,15,10], values=[0,1,2,3,4], alpha=0.05).
+
+Benchmarks:
+  --bfs       Single-call BFS microbenchmarks (tail + mass, varying n and p)
+  --many      Many-call pattern simulating solver (buffer reuse, log table caching)
+  --solver    Full solver end-to-end (equal_tail + mass methods)
+  --all       All of the above (default)
 """
 
 import argparse
+import random
 import timeit
 
 from grecov._ext import grecov_bfs, grecov_mass_bfs
@@ -64,26 +71,74 @@ def bench_tail_bfs():
     for n in [20, 50, 100]:
         s_obs = sum(ci * vi for ci, vi in zip(x_obs, v)) * n / 100
         print(f"\n=== grecov_bfs (tail) | n={n}, k=5, eps={eps} ===")
-        print(f"{'case':<12} {'time/call':>12} {'states':>10}")
-        print("-" * 36)
+        print(f"{'case':<12} {'time/call':>12} {'states':>10} {'M states/s':>12}")
+        print("-" * 48)
         for name, p in cases.items():
             res = grecov_bfs(p, v, s_obs, n, eps)
             t = _auto_bench(lambda p=p: grecov_bfs(p, v, s_obs, n, eps))
-            print(f"{name:<12} {_fmt_time(t)} {res['states_explored']:>10}")
+            states = res["states_explored"]
+            rate = states / t / 1e6 if t > 0 else 0
+            print(f"{name:<12} {_fmt_time(t)} {states:>10} {rate:>11.2f}")
 
 
 def bench_mass_bfs():
     for n_scale, x_obs_scaled in [(1, x_obs), (2, [c * 2 for c in x_obs])]:
         n = sum(x_obs_scaled)
         print(f"\n=== grecov_mass_bfs (mass) | n={n}, k=5, eps={eps} ===")
-        print(f"{'case':<12} {'time/call':>12} {'states':>10}")
-        print("-" * 36)
+        print(f"{'case':<12} {'time/call':>12} {'states':>10} {'M states/s':>12}")
+        print("-" * 48)
         for name, p in cases.items():
             res = grecov_mass_bfs(p, x_obs_scaled, eps, 1e-8)
             t = _auto_bench(
                 lambda p=p, xo=x_obs_scaled: grecov_mass_bfs(p, xo, eps, 1e-8)
             )
-            print(f"{name:<12} {_fmt_time(t)} {res['states_explored']:>10}")
+            states = res["states_explored"]
+            rate = states / t / 1e6 if t > 0 and states > 0 else 0
+            print(f"{name:<12} {_fmt_time(t)} {states:>10} {rate:>11.2f}")
+
+
+def bench_many_calls():
+    """Simulate solver pattern: many BFS calls with varying p, same n.
+
+    Measures benefit of:
+    - Cached log tables (log_fact, log_int rebuilt only when n changes)
+    - Reusable hash set (cleared but not deallocated between calls)
+    """
+    print("\n=== Many-call pattern (simulating solver) ===")
+
+    # Generate varied p vectors (like optimizer exploring the simplex)
+    rng = random.Random(42)
+    n_calls = 500
+    p_vectors = []
+    for _ in range(n_calls):
+        raw = [rng.random() for _ in range(5)]
+        s = sum(raw)
+        p_vectors.append([x / s for x in raw])
+
+    # Tail BFS many-call
+    s_obs = sum(ci * vi for ci, vi in zip(x_obs, v))
+    n = 100
+
+    def run_tail_many():
+        for p in p_vectors:
+            grecov_bfs(p, v, s_obs, n, eps)
+
+    run_tail_many()  # warm up
+    t_tail = timeit.timeit(run_tail_many, number=1)
+    print(
+        f"  tail BFS x{n_calls} (n={n}): {_fmt_time(t_tail)} total, {_fmt_time(t_tail / n_calls)}/call"
+    )
+
+    # Mass BFS many-call
+    def run_mass_many():
+        for p in p_vectors:
+            grecov_mass_bfs(p, x_obs, eps, 1e-8)
+
+    run_mass_many()
+    t_mass = timeit.timeit(run_mass_many, number=1)
+    print(
+        f"  mass BFS x{n_calls} (n={n}): {_fmt_time(t_mass)} total, {_fmt_time(t_mass / n_calls)}/call"
+    )
 
 
 def bench_solver():
@@ -119,19 +174,26 @@ def bench_solver():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--bfs", action="store_true", help="Run BFS microbenchmarks")
+    parser.add_argument(
+        "--many", action="store_true", help="Run many-call pattern benchmark"
+    )
     parser.add_argument(
         "--solver", action="store_true", help="Run full solver benchmark"
     )
     parser.add_argument("--all", action="store_true", help="Run all benchmarks")
     args = parser.parse_args()
 
-    if args.all or (not args.bfs and not args.solver):
-        args.bfs = args.solver = True
+    if args.all or (not args.bfs and not args.many and not args.solver):
+        args.bfs = args.many = args.solver = True
 
     if args.bfs:
         bench_tail_bfs()
         bench_mass_bfs()
+    if args.many:
+        bench_many_calls()
     if args.solver:
         bench_solver()
