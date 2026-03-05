@@ -99,18 +99,23 @@ def bench_solver():
         {"counts": [8, 6, 4, 2], "values": [0, 1, 2, 3], "label": "k=4 n=20"},
     ]
 
-    print("\n=== Full solver (confidence_interval, equal_tail) ===")
-    print(f"{'case':<16} {'time':>12} {'bfs_calls':>10} {'bfs_states':>12}")
-    print("-" * 52)
-    for tc in test_cases:
-        res = confidence_interval(tc["counts"], tc["values"], alpha=0.05)
-        t = _auto_bench(
-            lambda tc=tc: confidence_interval(tc["counts"], tc["values"], alpha=0.05)
-        )
-        print(
-            f"{tc['label']:<16} {_fmt_time(t)} {res['bfs_calls']:>10} {res['bfs_total_states']:>12}"
-        )
-        print(f"  CI: [{res['lower']:.6f}, {res['upper']:.6f}]")
+    for method in ["equal_tail", "mass"]:
+        print(f"\n=== Full solver (confidence_interval, {method}) ===")
+        print(f"{'case':<16} {'time':>12} {'bfs_calls':>10} {'bfs_states':>12}")
+        print("-" * 52)
+        for tc in test_cases:
+            res = confidence_interval(
+                tc["counts"], tc["values"], alpha=0.05, method=method
+            )
+            t = _auto_bench(
+                lambda tc=tc, m=method: confidence_interval(
+                    tc["counts"], tc["values"], alpha=0.05, method=m
+                )
+            )
+            print(
+                f"{tc['label']:<16} {_fmt_time(t)} {res['bfs_calls']:>10} {res['bfs_total_states']:>12}"
+            )
+            print(f"  CI: [{res['lower']:.6f}, {res['upper']:.6f}]")
 
 
 if __name__ == "__main__":
