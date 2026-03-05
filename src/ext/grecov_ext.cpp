@@ -8,6 +8,7 @@
 // - Template on D (dimension) so inner loops are fully unrolled at compile
 // time.
 // - Precomputed log(i) lookup table to avoid repeated std::log() calls.
+// - Cached log tables and reusable buffers across calls with same n.
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <queue>
 #include <vector>
 
@@ -65,6 +67,21 @@ public:
   explicit FlatHashSet(size_t initial_cap = 1 << 16)
       : slots_(initial_cap, EMPTY), mask_(initial_cap - 1), size_(0) {}
 
+  void clear() {
+    std::memset(slots_.data(), 0xFF, slots_.size() * sizeof(uint64_t));
+    size_ = 0;
+  }
+
+  void clear_and_shrink(size_t max_cap = 1 << 18) {
+    if (slots_.size() > max_cap) {
+      slots_.assign(max_cap, EMPTY);
+      mask_ = max_cap - 1;
+      size_ = 0;
+    } else {
+      clear();
+    }
+  }
+
   bool insert(uint64_t key) {
     if (__builtin_expect(size_ * 4 >= slots_.size() * 3, 0))
       grow();
@@ -108,21 +125,57 @@ struct EntryCompare {
   }
 };
 
-// ─── Precomputed tables ───────────────────────────────────────────
+// ─── Cached log tables ───────────────────────────────────────────
+// log_factorials(n) and log_integers(n) only depend on n, which is
+// fixed across all BFS calls in a single solver run. Cache them.
 
-static std::vector<double> log_factorials(int n) {
-  std::vector<double> lf(n + 1, 0.0);
-  for (int i = 1; i <= n; ++i)
-    lf[i] = lf[i - 1] + std::log(static_cast<double>(i));
-  return lf;
+struct LogTables {
+  int n = -1;
+  std::vector<double> log_fact;
+  std::vector<double> log_int;
+
+  const std::vector<double> &get_log_fact(int nn) {
+    if (nn != n)
+      rebuild(nn);
+    return log_fact;
+  }
+
+  const std::vector<double> &get_log_int(int nn) {
+    if (nn != n)
+      rebuild(nn);
+    return log_int;
+  }
+
+private:
+  void rebuild(int nn) {
+    n = nn;
+    log_fact.resize(nn + 1);
+    log_fact[0] = 0.0;
+    for (int i = 1; i <= nn; ++i)
+      log_fact[i] = log_fact[i - 1] + std::log(static_cast<double>(i));
+    log_int.resize(nn + 1);
+    log_int[0] = 0.0;
+    for (int i = 1; i <= nn; ++i)
+      log_int[i] = std::log(static_cast<double>(i));
+  }
+};
+
+static LogTables &cached_tables() {
+  static LogTables tables;
+  return tables;
 }
 
-// log(i) for i in [0..n], with log(0) = 0 (never used)
-static std::vector<double> log_integers(int n) {
-  std::vector<double> li(n + 1, 0.0);
-  for (int i = 1; i <= n; ++i)
-    li[i] = std::log(static_cast<double>(i));
-  return li;
+// ─── Reusable per-thread BFS buffers ──────────────────────────────
+
+struct BFSBuffers {
+  FlatHashSet visited;
+
+  void reset() { visited.clear_and_shrink(); }
+};
+
+static BFSBuffers &get_buffers() {
+  static BFSBuffers bufs;
+  return bufs;
 }
 
 // ─── Balanced rounding (largest-remainder method) ──────────────────
@@ -170,8 +223,9 @@ grecov_bfs_d(const double *p, const double *v, double S_obs, int n,
   for (int i = 0; i < D; ++i)
     log_p[i] = std::log(p[i]);
 
-  auto log_fact = log_factorials(n);
-  auto li = log_integers(n);
+  auto &tables = cached_tables();
+  const auto &log_fact = tables.get_log_fact(n);
+  const auto &li = tables.get_log_int(n);
 
   auto log_prob = [&](uint64_t state) -> double {
     int c[D];
@@ -187,14 +241,15 @@ grecov_bfs_d(const double *p, const double *v, double S_obs, int n,
   uint64_t start_state = start_counts<D>(p, n);
   double start_lp = log_prob(start_state);
 
+  auto &bufs = get_buffers();
+  bufs.reset();
+
   std::vector<Entry> heap_storage;
   heap_storage.reserve(1 << 16);
   std::priority_queue<Entry, std::vector<Entry>, EntryCompare> heap(
       EntryCompare{}, std::move(heap_storage));
-  FlatHashSet visited;
-
   heap.push({start_lp, start_state});
-  visited.insert(start_state);
+  bufs.visited.insert(start_state);
 
   double P_explored = 0.0;
   constexpr int dk = D * D;
@@ -252,7 +307,7 @@ grecov_bfs_d(const double *p, const double *v, double S_obs, int n,
         if (i == j)
           continue;
         uint64_t neighbor = state + DELTA[i] - DELTA[j];
-        if (!visited.insert(neighbor))
+        if (!bufs.visited.insert(neighbor))
           continue;
         double logP_n = logP + li[c[j]] - li[c[i] + 1] + log_p[i] - log_p[j];
         heap.push({logP_n, neighbor});
@@ -298,8 +353,9 @@ grecov_mass_bfs_d(const double *p, const int *x_obs, int n, double eps,
   for (int i = 0; i < D; ++i)
     log_p[i] = std::log(p[i]);
 
-  auto log_fact = log_factorials(n);
-  auto li = log_integers(n);
+  auto &tables = cached_tables();
+  const auto &log_fact = tables.get_log_fact(n);
+  const auto &li = tables.get_log_int(n);
 
   auto log_prob = [&](const int *c) -> double {
     double val = log_fact[n];
@@ -315,19 +371,19 @@ grecov_mass_bfs_d(const double *p, const int *x_obs, int n, double eps,
 
   uint64_t start_state = start_counts<D>(p, n);
 
-  // Compute start log-prob via unpack
   int sc[D];
   unpack_state<D>(start_state, sc);
   double start_lp = log_prob(sc);
+
+  auto &bufs = get_buffers();
+  bufs.reset();
 
   std::vector<Entry> heap_storage;
   heap_storage.reserve(1 << 16);
   std::priority_queue<Entry, std::vector<Entry>, EntryCompare> heap(
       EntryCompare{}, std::move(heap_storage));
-  FlatHashSet visited;
-
   heap.push({start_lp, start_state});
-  visited.insert(start_state);
+  bufs.visited.insert(start_state);
 
   double mass = 0.0;
   int64_t states_explored = 0;
@@ -356,7 +412,7 @@ grecov_mass_bfs_d(const double *p, const int *x_obs, int n, double eps,
         if (i == j)
           continue;
         uint64_t neighbor = state + DELTA[i] - DELTA[j];
-        if (!visited.insert(neighbor))
+        if (!bufs.visited.insert(neighbor))
           continue;
         double logP_n = logP + li[c[j]] - li[c[i] + 1] + log_p[i] - log_p[j];
         heap.push({logP_n, neighbor});
