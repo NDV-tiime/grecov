@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install IPOPT
-        run: sudo apt-get install -y coinor-libipopt-dev
+        run: sudo apt-get install -y coinor-libipopt-dev liblapack-dev libblas-dev
 
       - name: Install dependencies
         run: |
