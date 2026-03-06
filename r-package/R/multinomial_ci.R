@@ -7,18 +7,18 @@
 #' @param values Numeric vector of values assigned to each category
 #'   (same length as `counts`).
 #' @param alpha Significance level (default 0.05 for a 95\% CI).
-#' @param method Either `"equal_tail"` (default) or `"mass"`.
+#' @param method Either `"equal_tail"` (default) or `"greedy"`.
 #' @param eps_ratio BFS stopping tolerance as fraction of alpha (default 1e-3).
 #' @param verbose Verbosity level: 0 = silent, 1 = BFS stats, 2 = optimizer
 #'   output.
 #' @param optimizer Optimizer backend. `NULL` uses the default (`"ipopt"` or
-#'   `"trust-constr"` for equal_tail, `"de"` for mass).
+#'   `"trust-constr"` for equal_tail, `"de"` for greedy).
 #' @param param Parametrization: `"direct"`, `"reduced"`, or `"logit"`. `NULL`
 #'   uses the default for the chosen optimizer.
 #' @param pmin Minimum probability bound for direct/reduced parametrizations
 #'   (default 1e-8).
 #' @param theta_max Bound on theta for softmax parametrization (default 10).
-#' @param tie_margin Log-probability margin for near-tie exclusion in mass
+#' @param tie_margin Log-probability margin for near-tie exclusion in greedy
 #'   method (default 1e-8).
 #' @param use_python Force pure-Python BFS instead of C++ extension (default
 #'   `FALSE`).
@@ -35,7 +35,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' result <- confidence_interval(
+#' result <- multinomial_ci(
 #'   counts = c(10, 10, 20, 60),
 #'   values = c(1, 2, 3, 4),
 #'   alpha = 0.05
@@ -44,7 +44,7 @@
 #' }
 #'
 #' @export
-confidence_interval <- function(counts,
+multinomial_ci <- function(counts,
                                 values,
                                 alpha = 0.05,
                                 method = "equal_tail",
@@ -56,7 +56,7 @@ confidence_interval <- function(counts,
                                 theta_max = 10.0,
                                 tie_margin = 1e-8,
                                 use_python = FALSE) {
-  result <- grecov_mod$confidence_interval(
+  result <- grecov_mod$multinomial_ci(
     counts = as.integer(counts),
     values = as.double(values),
     alpha = alpha,

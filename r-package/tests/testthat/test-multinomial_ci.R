@@ -1,5 +1,5 @@
-test_that("confidence_interval returns valid CI", {
-  result <- confidence_interval(
+test_that("multinomial_ci returns valid CI", {
+  result <- multinomial_ci(
     counts = c(10, 10, 20, 60),
     values = c(1, 2, 3, 4),
     alpha = 0.05
@@ -17,12 +17,12 @@ test_that("confidence_interval returns valid CI", {
   expect_true(result$upper > 3.3)
 })
 
-test_that("confidence_interval works with method='mass'", {
-  result <- confidence_interval(
+test_that("multinomial_ci works with method='mass'", {
+  result <- multinomial_ci(
     counts = c(10, 10, 20, 60),
     values = c(1, 2, 3, 4),
     alpha = 0.05,
-    method = "mass"
+    method = "greedy"
   )
 
   expect_type(result, "list")
@@ -31,8 +31,8 @@ test_that("confidence_interval works with method='mass'", {
   expect_true(result$upper > 3.3)
 })
 
-test_that("confidence_interval works with 2 categories", {
-  result <- confidence_interval(
+test_that("multinomial_ci works with 2 categories", {
+  result <- multinomial_ci(
     counts = c(30, 70),
     values = c(0, 1),
     alpha = 0.05

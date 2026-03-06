@@ -1,6 +1,6 @@
 """Timing benchmarks for the C++ BFS hot path.
 
-Uses p vectors extracted from a real solver run (confidence_interval with
+Uses p vectors extracted from a real solver run (multinomial_ci with
 counts=[30,25,20,15,10], values=[0,1,2,3,4], alpha=0.05).
 
 Benchmarks:
@@ -142,7 +142,7 @@ def bench_many_calls():
 
 
 def bench_solver():
-    from grecov.solver import confidence_interval
+    from grecov.solver import multinomial_ci
 
     test_cases = [
         {
@@ -154,16 +154,14 @@ def bench_solver():
         {"counts": [8, 6, 4, 2], "values": [0, 1, 2, 3], "label": "k=4 n=20"},
     ]
 
-    for method in ["equal_tail", "mass"]:
-        print(f"\n=== Full solver (confidence_interval, {method}) ===")
+    for method in ["equal_tail", "greedy"]:
+        print(f"\n=== Full solver (multinomial_ci, {method}) ===")
         print(f"{'case':<16} {'time':>12} {'bfs_calls':>10} {'bfs_states':>12}")
         print("-" * 52)
         for tc in test_cases:
-            res = confidence_interval(
-                tc["counts"], tc["values"], alpha=0.05, method=method
-            )
+            res = multinomial_ci(tc["counts"], tc["values"], alpha=0.05, method=method)
             t = _auto_bench(
-                lambda tc=tc, m=method: confidence_interval(
+                lambda tc=tc, m=method: multinomial_ci(
                     tc["counts"], tc["values"], alpha=0.05, method=m
                 )
             )

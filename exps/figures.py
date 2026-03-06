@@ -9,7 +9,7 @@ except NameError:
     plt.switch_backend("Agg")
 
 from grecov.bfs import grecov_bfs, grecov_mass_bfs
-from grecov.solver import confidence_interval
+from grecov.solver import multinomial_ci
 
 # ── 1D explored mass plot ────────────────────────────────────────────────────
 
@@ -41,8 +41,8 @@ alpha = 0.05
 bound = alpha / 2.0
 mass_bound = 1 - alpha
 
-ci_mass = confidence_interval(x_obs, v_arr.tolist(), alpha=alpha, method="mass")
-ci_tail = confidence_interval(x_obs, v, alpha=alpha, method="equal_tail")
+ci_mass = multinomial_ci(x_obs, v_arr.tolist(), alpha=alpha, method="greedy")
+ci_tail = multinomial_ci(x_obs, v, alpha=alpha, method="equal_tail")
 
 p_lo_mass, p_up_mass = ci_mass["p_lower"], ci_mass["p_upper"]
 p_lo_tail, p_up_tail = ci_tail["p_lower"], ci_tail["p_upper"]

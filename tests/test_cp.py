@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.stats import beta
 
-from grecov import confidence_interval
+from grecov import multinomial_ci
 
 try:
     import cyipopt  # noqa: F401
@@ -58,7 +58,7 @@ def test_equal_tail_matches_clopper_pearson(x, n, alpha, eps_ratio, tol):
     counts = np.array([n - x, x])
     values = np.array([0.0, 1.0])
 
-    result = confidence_interval(
+    result = multinomial_ci(
         counts,
         values,
         alpha=alpha,

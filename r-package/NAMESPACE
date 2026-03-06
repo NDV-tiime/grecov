@@ -1,4 +1,4 @@
-export(confidence_interval)
+export(multinomial_ci)
 export(grecov_bfs)
 export(install_grecov)
 importFrom(reticulate, import)

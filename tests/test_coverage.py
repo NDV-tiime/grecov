@@ -1,4 +1,4 @@
-"""Coverage tests for confidence_interval.
+"""Coverage tests for multinomial_ci.
 
 For small (n, k), enumerates ALL multinomial outcomes and verifies that
 the probability-weighted coverage is at least 1 - alpha.
@@ -9,7 +9,7 @@ import math
 import numpy as np
 import pytest
 
-from grecov.solver import confidence_interval
+from grecov.solver import multinomial_ci
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ def _check_coverage(p, values, n, alpha, method, **kwargs):
     for counts in _enumerate_outcomes(n, k):
         prob = _multinomial_prob(counts, p)
         try:
-            r = confidence_interval(
+            r = multinomial_ci(
                 list(counts), values, alpha=alpha, method=method, **kwargs
             )
             if r["lower"] <= mu_true <= r["upper"]:
@@ -119,9 +119,9 @@ def test_equal_tail_coverage_trust_constr(k, n, p, values, alpha):
     ids=[_case_id(c) for c in CASES],
 )
 @pytest.mark.parametrize("alpha", [0.05, 0.01])
-def test_mass_coverage(k, n, p, values, alpha):
+def test_greedy_coverage(k, n, p, values, alpha):
     np.random.seed(42)
-    coverage = _check_coverage(p, values, n, alpha, method="mass")
+    coverage = _check_coverage(p, values, n, alpha, method="greedy")
     assert coverage >= 1 - alpha, (
         f"Coverage {coverage:.6f} < {1 - alpha} for k={k}, n={n}, "
         f"p=[{', '.join(f'{pi:.3f}' for pi in p)}], alpha={alpha}"

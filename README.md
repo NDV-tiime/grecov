@@ -32,9 +32,9 @@ pre-commit install
 ## Usage
 
 ```python
-from grecov import confidence_interval
+from grecov import multinomial_ci
 
-result = confidence_interval(
+result = multinomial_ci(
     counts=[10, 10, 20, 60],
     values=[1, 2, 3, 4],
     alpha=0.05,
@@ -65,7 +65,7 @@ grecov::install_grecov()
 ```r
 library(grecov)
 
-result <- confidence_interval(
+result <- multinomial_ci(
   counts = c(10, 10, 20, 60),
   values = c(1, 2, 3, 4),
   alpha = 0.05
@@ -90,11 +90,11 @@ cat(sprintf("P(S <= 330) = %.6f\n", bfs$prob_left))
 All parameters from the Python API are available:
 
 ```r
-result <- confidence_interval(
+result <- multinomial_ci(
   counts = c(10, 10, 20, 60),
   values = c(1, 2, 3, 4),
   alpha = 0.10,
-  method = "mass",
+  method = "greedy",
   verbose = 1L
 )
 ```
@@ -129,8 +129,8 @@ await pyodide.loadPackage(["numpy", "scipy"]);
 await pyodide.loadPackage("./grecov-0.1.0-cp312-cp312-pyodide_2024_0_wasm32.whl");
 
 pyodide.runPython(`
-from grecov import confidence_interval
-result = confidence_interval(
+from grecov import multinomial_ci
+result = multinomial_ci(
     counts=[10, 10, 20, 60],
     values=[1, 2, 3, 4],
     alpha=0.05,

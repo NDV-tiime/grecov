@@ -575,12 +575,12 @@ def _solve_endpoint_mass(sign: float, ctx: MassContext) -> tuple[float, np.ndarr
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def confidence_interval(
+def multinomial_ci(
     counts,
     values,
     alpha=0.05,
     *,
-    method: Literal["equal_tail", "mass"] = "equal_tail",
+    method: Literal["equal_tail", "greedy"] = "equal_tail",
     eps_ratio: float = 1e-3,
     verbose=0,
     optimizer: str | None = None,
@@ -601,14 +601,14 @@ def confidence_interval(
     alpha : float
         Significance level (default 0.05 for a 95% CI).
     method : str
-        ``"equal_tail"`` (two-sided tail BFS) or ``"mass"`` (likelihood-ordered BFS).
+        ``"equal_tail"`` (two-sided tail BFS) or ``"greedy"`` (likelihood-ordered BFS).
     eps_ratio : float
         BFS stopping tolerance as a fraction of alpha. Default: 1e-3.
     verbose : int
         Verbosity level: 0 = silent, 1 = BFS stats, 2 = optimizer output.
     optimizer : str or None
         Optimizer backend.  Default: ``"ipopt"`` or ``"trust-constr"``
-        (depending on availability) for equal_tail, ``"de"`` for mass.
+        (depending on availability) for equal_tail, ``"de"`` for greedy.
     param : str or None
         Parametrization.  Default: depends on optimizer.
     pmin : float
@@ -616,7 +616,7 @@ def confidence_interval(
     theta_max : float
         Bound on theta parameters for softmax parametrization.
     tie_margin : float
-        Log-probability margin for near-tie exclusion in BFS (mass only).
+        Log-probability margin for near-tie exclusion in BFS (greedy only).
     use_python : bool
         Force use of the pure-Python BFS implementation.
 
@@ -640,7 +640,7 @@ def confidence_interval(
         if param is None:
             param = {"ipopt": "direct", "trust-constr": "logit"}[optimizer]
         bfs_impl = _bfs_py if use_python or _bfs_ext is None else _bfs_ext
-    else:  # mass
+    else:  # greedy
         if optimizer is None:
             optimizer = "de"
         if param is None:
@@ -672,7 +672,7 @@ def confidence_interval(
         upper_neg, p_upper = _solve_endpoint_tail(-1.0, ctx)
         upper = -upper_neg
         stats = ctx.stats
-    else:  # mass
+    else:  # greedy
         ctx_mass = MassContext(
             v=v,
             k=k,
