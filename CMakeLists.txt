@@ -17,6 +17,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|Emscripten")
   if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     target_compile_options(_ext PRIVATE -fexceptions)
     target_link_options(_ext PRIVATE -fexceptions)
+    # nanobind's static library must also be compiled with -fexceptions
+    # so it can catch C++ exceptions and translate them to Python errors
+    if(TARGET nanobind-static)
+      target_compile_options(nanobind-static PRIVATE -fexceptions)
+    endif()
   else()
     target_compile_options(_ext PRIVATE -march=native)
   endif()

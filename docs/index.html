@@ -180,21 +180,9 @@ async function init() {
     status.textContent = "Installing packages...";
     await pyodide.loadPackage(["micropip", "numpy", "scipy"]);
 
-    const res = await fetch(
-      "https://api.github.com/repos/louisabraham/grecov/releases/latest"
-    );
-    const release = await res.json();
-    const wheel = release.assets.find((a) => a.name.includes("pyodide"));
-
-    if (!wheel) {
-      status.textContent = "No pyodide wheel found in latest release";
-      status.className = "error";
-      return;
-    }
-
     await pyodide.runPythonAsync(`
 import micropip
-await micropip.install("${wheel.browser_download_url}")
+await micropip.install("./grecov.whl")
 from grecov import multinomial_ci
     `);
 

@@ -8,6 +8,7 @@ permissions:
   contents: write
   id-token: write
   issues: write
+  pages: write
 
 jobs:
   check_version:
@@ -95,6 +96,35 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
+
+  deploy_pages:
+    name: Deploy Pages
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-pyodide
+          path: _site
+
+      - name: Assemble site
+        run: |
+          cp docs/index.html _site/
+          # Rename wheel to a stable name so the page can reference it
+          mv _site/*.whl _site/grecov.whl
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
 
   publish:
     name: Publish
