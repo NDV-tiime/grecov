@@ -204,7 +204,7 @@ class Logit(Parametrization):
 
     def x0(self, p_init):
         theta0 = np.log(p_init)
-        return (theta0 - theta0[-1])[:-1]
+        return theta0[:-1] - theta0[-1]
 
     def bounds(self):
         r = self._k - 1
