@@ -115,8 +115,8 @@ jobs:
       - name: Assemble site
         run: |
           cp docs/index.html _site/
-          # Rename wheel to a stable name so the page can reference it
-          mv _site/*.whl _site/grecov.whl
+          # Write the wheel filename so the page can find it
+          echo "$(ls _site/*.whl | xargs -n1 basename)" > _site/wheel.txt
 
       - uses: actions/upload-pages-artifact@v3
         with:
