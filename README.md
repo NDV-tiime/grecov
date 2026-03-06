@@ -8,12 +8,6 @@ Efficient Neyman construction for multinomial distributions with the Greedy Cove
 pip install .
 ```
 
-For faster optimization (optional):
-
-```bash
-pip install ".[ipopt]"
-```
-
 ## Development
 
 Install in editable mode with test dependencies:
@@ -46,6 +40,63 @@ result = confidence_interval(
     alpha=0.05,
 )
 print(f"95% CI: [{result['lower']:.4f}, {result['upper']:.4f}]")
+```
+
+## R (via reticulate)
+
+An R package is available in `r-package/` that wraps grecov using
+[reticulate](https://rstudio.github.io/reticulate/).
+
+### Installation
+
+```r
+# Install reticulate if needed
+install.packages("reticulate")
+
+# Install the R package from the local directory
+install.packages("r-package", repos = NULL, type = "source")
+
+# Install the grecov Python package into reticulate's Python environment
+grecov::install_grecov()
+```
+
+### Usage
+
+```r
+library(grecov)
+
+result <- confidence_interval(
+  counts = c(10, 10, 20, 60),
+  values = c(1, 2, 3, 4),
+  alpha = 0.05
+)
+cat(sprintf("95%% CI: [%.4f, %.4f]\n", result$lower, result$upper))
+```
+
+The low-level BFS function is also available:
+
+```r
+bfs <- grecov_bfs(
+  p = c(0.1, 0.1, 0.2, 0.6),
+  v = c(1, 2, 3, 4),
+  s_obs = 330,
+  n = 100L
+)
+cat(sprintf("P(S <= 330) = %.6f\n", bfs$prob_left))
+```
+
+### Options
+
+All parameters from the Python API are available:
+
+```r
+result <- confidence_interval(
+  counts = c(10, 10, 20, 60),
+  values = c(1, 2, 3, 4),
+  alpha = 0.10,
+  method = "mass",
+  verbose = 1L
+)
 ```
 
 ## Pyodide (browser / WebAssembly)

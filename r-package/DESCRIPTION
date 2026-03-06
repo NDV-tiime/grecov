@@ -1,0 +1,18 @@
+Package: grecov
+Title: Exact Confidence Intervals for Multinomial Distributions
+Version: 0.1.0
+Authors@R: person("Louis", "Abraham", role = c("aut", "cre"),
+           email = "louis.abraham@yahoo.fr")
+Description: R interface to the 'grecov' Python package for computing exact
+    confidence intervals for weighted sums of multinomial categories via
+    Neyman construction with the Greedy Coverage (GreCov) algorithm.
+    Uses 'reticulate' to call the underlying Python implementation.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    reticulate (>= 1.41)
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
