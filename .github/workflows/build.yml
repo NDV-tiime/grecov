@@ -22,41 +22,56 @@ jobs:
         include:
           - os: linux-intel
             runs-on: ubuntu-latest
-            cibw_platform: auto
           - os: linux-arm
             runs-on: ubuntu-24.04-arm
-            cibw_platform: auto
           - os: macos-intel
             runs-on: macos-15-intel
-            cibw_platform: auto
           - os: macos-arm
             runs-on: macos-latest
-            cibw_platform: auto
           - os: windows
             runs-on: windows-latest
-            cibw_platform: auto
-          - os: pyodide
-            runs-on: ubuntu-latest
-            cibw_platform: pyodide
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.23
-        with:
-          platform: ${{ matrix.cibw_platform }}
         env:
           CIBW_BUILD: "cp311-* cp312-* cp313-*"
           CIBW_SKIP: "pp* *-win32 *-manylinux_i686 *-musllinux*"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "pytest {project}/tests -q"
           CIBW_BUILD_VERBOSITY: 1
+          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.13"
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
+
+  build_pyodide:
+    name: Wheels (pyodide)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyodide-build
+      - name: Get Emscripten version
+        run: echo "EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version)" >> $GITHUB_ENV
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+
+      - run: pyodide build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-pyodide
+          path: dist/*.whl
 
   build_sdist:
     name: sdist
@@ -71,7 +86,7 @@ jobs:
 
   upload_pypi:
     name: Upload to PyPI
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_pyodide, build_sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
     environment:
@@ -86,7 +101,7 @@ jobs:
 
   create_tag:
     name: Create version tag
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_pyodide, build_sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
