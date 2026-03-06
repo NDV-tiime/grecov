@@ -22,10 +22,22 @@
 
 namespace nb = nanobind;
 
+// ─── Shared hash finalizer ──────────────────────────────────────────
+
+inline size_t murmur_mix64(uint64_t x) {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ULL;
+  x ^= x >> 33;
+  return static_cast<size_t>(x);
+}
+
 // ─── Packing schemes ────────────────────────────────────────────────
 
-// 8-bit per dimension, single uint64_t (d<=8, n<=255)
+// 8-bit per dimension, single uint64_t (d 5-8, n<=255)
 template <int D> struct Pack8 {
+  static_assert(D >= 5 && D <= 8);
   using State = uint64_t;
   static constexpr State EMPTY = ~uint64_t(0);
 
@@ -45,17 +57,10 @@ template <int D> struct Pack8 {
                                        1ULL << 8,  1ULL};
     return s + D8[i] - D8[j];
   }
-  static inline size_t hash(State x) {
-    x ^= x >> 33;
-    x *= 0xff51afd7ed558ccdULL;
-    x ^= x >> 33;
-    x *= 0xc4ceb9fe1a85ec53ULL;
-    x ^= x >> 33;
-    return static_cast<size_t>(x);
-  }
+  static inline size_t hash(State x) { return murmur_mix64(x); }
 };
 
-// 16-bit per dimension, single uint64_t (d<=4, n<=65535)
+// 16-bit per dimension, single uint64_t (d<=4, any n)
 template <int D> struct Pack16 {
   static_assert(D <= 4);
   using State = uint64_t;
@@ -76,17 +81,10 @@ template <int D> struct Pack16 {
                                         1ULL};
     return s + D16[i] - D16[j];
   }
-  static inline size_t hash(State x) {
-    x ^= x >> 33;
-    x *= 0xff51afd7ed558ccdULL;
-    x ^= x >> 33;
-    x *= 0xc4ceb9fe1a85ec53ULL;
-    x ^= x >> 33;
-    return static_cast<size_t>(x);
-  }
+  static inline size_t hash(State x) { return murmur_mix64(x); }
 };
 
-// 16-bit per dimension, __uint128_t (d 5-8, n<=65535)
+// 16-bit per dimension, __uint128_t (d 5-8, n>255)
 // big-endian: dim 0 at bits 112-127, dim 7 at bits 0-15
 template <int D> struct Pack16x2 {
   static_assert(D >= 5 && D <= 8);
@@ -115,13 +113,7 @@ template <int D> struct Pack16x2 {
   static inline size_t hash(State x) {
     uint64_t lo = static_cast<uint64_t>(x);
     uint64_t hi = static_cast<uint64_t>(x >> 64);
-    uint64_t h = lo ^ (hi * 0x9e3779b97f4a7c15ULL);
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccdULL;
-    h ^= h >> 33;
-    h *= 0xc4ceb9fe1a85ec53ULL;
-    h ^= h >> 33;
-    return static_cast<size_t>(h);
+    return murmur_mix64(lo ^ (hi * 0x9e3779b97f4a7c15ULL));
   }
 };
 
@@ -201,20 +193,9 @@ struct LogTables {
   std::vector<double> log_fact;
   std::vector<double> log_int;
 
-  const std::vector<double> &get_log_fact(int nn) {
-    if (nn != n)
-      rebuild(nn);
-    return log_fact;
-  }
-
-  const std::vector<double> &get_log_int(int nn) {
-    if (nn != n)
-      rebuild(nn);
-    return log_int;
-  }
-
-private:
-  void rebuild(int nn) {
+  void ensure(int nn) {
+    if (nn == n)
+      return;
     n = nn;
     log_fact.resize(nn + 1);
     log_fact[0] = 0.0;
@@ -290,8 +271,9 @@ grecov_bfs_impl(const double *p, const double *v, double S_obs, int n,
     log_p[i] = std::log(p[i]);
 
   auto &tables = cached_tables();
-  const auto &log_fact = tables.get_log_fact(n);
-  const auto &li = tables.get_log_int(n);
+  tables.ensure(n);
+  const auto &log_fact = tables.log_fact;
+  const auto &li = tables.log_int;
 
   auto log_prob = [&](State state) -> double {
     int c[D];
@@ -424,8 +406,9 @@ grecov_mass_bfs_impl(const double *p, const int *x_obs, int n, double eps,
     log_p[i] = std::log(p[i]);
 
   auto &tables = cached_tables();
-  const auto &log_fact = tables.get_log_fact(n);
-  const auto &li = tables.get_log_int(n);
+  tables.ensure(n);
+  const auto &log_fact = tables.log_fact;
+  const auto &li = tables.log_int;
 
   auto log_prob = [&](const int *c) -> double {
     double val = log_fact[n];
@@ -493,24 +476,22 @@ grecov_mass_bfs_impl(const double *p, const int *x_obs, int n, double eps,
   return {mass, states_explored};
 }
 
-// ─── Dispatch by dimension and packing ─────────────────────────────
+// ─── Input validation & probability stabilization ──────────────────
 
-static BFSResult grecov_bfs_dispatch(const std::vector<double> &p_raw,
-                                     const std::vector<double> &v, double S_obs,
-                                     int n, double eps) {
-  int d = static_cast<int>(p_raw.size());
-
+static void validate_inputs(int d, int n, int v_size = -1) {
   if (d < 2 || d > 8)
     throw std::runtime_error("dimension must be between 2 and 8");
-  if (static_cast<int>(v.size()) != d)
-    throw std::runtime_error("p and v must have the same length");
+  if (v_size >= 0 && v_size != d)
+    throw std::runtime_error("all input vectors must have the same length");
   if (n <= 0)
     throw std::runtime_error("n must be positive");
   if (n > 65535)
     throw std::runtime_error("n must be <= 65535");
+}
 
-  // Stabilise probabilities
+static std::vector<double> stabilize_probs(const std::vector<double> &p_raw) {
   constexpr double MIN_P = 1e-300;
+  int d = static_cast<int>(p_raw.size());
   std::vector<double> p(d);
   double p_sum = 0.0;
   for (int i = 0; i < d; ++i) {
@@ -519,18 +500,38 @@ static BFSResult grecov_bfs_dispatch(const std::vector<double> &p_raw,
   }
   for (int i = 0; i < d; ++i)
     p[i] /= p_sum;
+  return p;
+}
 
+// ─── Dispatch by dimension and packing ─────────────────────────────
+
+static BFSResult grecov_bfs_dispatch(const std::vector<double> &p_raw,
+                                     const std::vector<double> &v, double S_obs,
+                                     int n, double eps) {
+  int d = static_cast<int>(p_raw.size());
+  validate_inputs(d, n, static_cast<int>(v.size()));
+  auto p = stabilize_probs(p_raw);
   const double *pp = p.data();
   const double *vp = v.data();
 
-  if (n <= 255) {
+  // d<=4: use Pack16 (uint64_t, 16-bit slots) for all n
+  // d>=5, n<=255: use Pack8 (uint64_t, 8-bit slots)
+  // d>=5, n>255: use Pack16x2 (__uint128_t, 16-bit slots)
+  if (d <= 4) {
+#define DISPATCH_BFS_16(D_VAL)                                                 \
+  case D_VAL:                                                                  \
+    return grecov_bfs_impl<D_VAL, Pack16<D_VAL>>(pp, vp, S_obs, n, eps);
+    switch (d) {
+      DISPATCH_BFS_16(2)
+      DISPATCH_BFS_16(3)
+      DISPATCH_BFS_16(4)
+    }
+#undef DISPATCH_BFS_16
+  } else if (n <= 255) {
 #define DISPATCH_BFS_8(D_VAL)                                                  \
   case D_VAL:                                                                  \
     return grecov_bfs_impl<D_VAL, Pack8<D_VAL>>(pp, vp, S_obs, n, eps);
     switch (d) {
-      DISPATCH_BFS_8(2)
-      DISPATCH_BFS_8(3)
-      DISPATCH_BFS_8(4)
       DISPATCH_BFS_8(5)
       DISPATCH_BFS_8(6)
       DISPATCH_BFS_8(7)
@@ -538,22 +539,16 @@ static BFSResult grecov_bfs_dispatch(const std::vector<double> &p_raw,
     }
 #undef DISPATCH_BFS_8
   } else {
+#define DISPATCH_BFS_16X2(D_VAL)                                               \
+  case D_VAL:                                                                  \
+    return grecov_bfs_impl<D_VAL, Pack16x2<D_VAL>>(pp, vp, S_obs, n, eps);
     switch (d) {
-    case 2:
-      return grecov_bfs_impl<2, Pack16<2>>(pp, vp, S_obs, n, eps);
-    case 3:
-      return grecov_bfs_impl<3, Pack16<3>>(pp, vp, S_obs, n, eps);
-    case 4:
-      return grecov_bfs_impl<4, Pack16<4>>(pp, vp, S_obs, n, eps);
-    case 5:
-      return grecov_bfs_impl<5, Pack16x2<5>>(pp, vp, S_obs, n, eps);
-    case 6:
-      return grecov_bfs_impl<6, Pack16x2<6>>(pp, vp, S_obs, n, eps);
-    case 7:
-      return grecov_bfs_impl<7, Pack16x2<7>>(pp, vp, S_obs, n, eps);
-    case 8:
-      return grecov_bfs_impl<8, Pack16x2<8>>(pp, vp, S_obs, n, eps);
+      DISPATCH_BFS_16X2(5)
+      DISPATCH_BFS_16X2(6)
+      DISPATCH_BFS_16X2(7)
+      DISPATCH_BFS_16X2(8)
     }
+#undef DISPATCH_BFS_16X2
   }
   __builtin_unreachable();
 }
@@ -565,40 +560,30 @@ static MassBFSResult grecov_mass_bfs_dispatch(const std::vector<double> &p_raw,
   int n = 0;
   for (auto xi : x_obs)
     n += xi;
-
-  if (d < 2 || d > 8)
-    throw std::runtime_error("dimension must be between 2 and 8");
-  if (static_cast<int>(x_obs.size()) != d)
-    throw std::runtime_error("p and x_obs must have the same length");
-  if (n <= 0)
-    throw std::runtime_error("n must be positive");
-  if (n > 65535)
-    throw std::runtime_error("n must be <= 65535");
-
-  // Stabilise probabilities
-  constexpr double MIN_P = 1e-300;
-  std::vector<double> p(d);
-  double p_sum = 0.0;
-  for (int i = 0; i < d; ++i) {
-    p[i] = std::max(p_raw[i], MIN_P);
-    p_sum += p[i];
-  }
-  for (int i = 0; i < d; ++i)
-    p[i] /= p_sum;
+  validate_inputs(d, n, static_cast<int>(x_obs.size()));
+  auto p = stabilize_probs(p_raw);
 
   std::vector<int> x(x_obs.begin(), x_obs.end());
   const double *pp = p.data();
   const int *xp = x.data();
 
-  if (n <= 255) {
+  if (d <= 4) {
+#define DISPATCH_MASS_16(D_VAL)                                                \
+  case D_VAL:                                                                  \
+    return grecov_mass_bfs_impl<D_VAL, Pack16<D_VAL>>(pp, xp, n, eps,          \
+                                                      tie_margin);
+    switch (d) {
+      DISPATCH_MASS_16(2)
+      DISPATCH_MASS_16(3)
+      DISPATCH_MASS_16(4)
+    }
+#undef DISPATCH_MASS_16
+  } else if (n <= 255) {
 #define DISPATCH_MASS_8(D_VAL)                                                 \
   case D_VAL:                                                                  \
     return grecov_mass_bfs_impl<D_VAL, Pack8<D_VAL>>(pp, xp, n, eps,           \
                                                      tie_margin);
     switch (d) {
-      DISPATCH_MASS_8(2)
-      DISPATCH_MASS_8(3)
-      DISPATCH_MASS_8(4)
       DISPATCH_MASS_8(5)
       DISPATCH_MASS_8(6)
       DISPATCH_MASS_8(7)
@@ -606,22 +591,17 @@ static MassBFSResult grecov_mass_bfs_dispatch(const std::vector<double> &p_raw,
     }
 #undef DISPATCH_MASS_8
   } else {
+#define DISPATCH_MASS_16X2(D_VAL)                                              \
+  case D_VAL:                                                                  \
+    return grecov_mass_bfs_impl<D_VAL, Pack16x2<D_VAL>>(pp, xp, n, eps,        \
+                                                        tie_margin);
     switch (d) {
-    case 2:
-      return grecov_mass_bfs_impl<2, Pack16<2>>(pp, xp, n, eps, tie_margin);
-    case 3:
-      return grecov_mass_bfs_impl<3, Pack16<3>>(pp, xp, n, eps, tie_margin);
-    case 4:
-      return grecov_mass_bfs_impl<4, Pack16<4>>(pp, xp, n, eps, tie_margin);
-    case 5:
-      return grecov_mass_bfs_impl<5, Pack16x2<5>>(pp, xp, n, eps, tie_margin);
-    case 6:
-      return grecov_mass_bfs_impl<6, Pack16x2<6>>(pp, xp, n, eps, tie_margin);
-    case 7:
-      return grecov_mass_bfs_impl<7, Pack16x2<7>>(pp, xp, n, eps, tie_margin);
-    case 8:
-      return grecov_mass_bfs_impl<8, Pack16x2<8>>(pp, xp, n, eps, tie_margin);
+      DISPATCH_MASS_16X2(5)
+      DISPATCH_MASS_16X2(6)
+      DISPATCH_MASS_16X2(7)
+      DISPATCH_MASS_16X2(8)
     }
+#undef DISPATCH_MASS_16X2
   }
   __builtin_unreachable();
 }
