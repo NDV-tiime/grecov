@@ -9,10 +9,6 @@ Efficient Neyman construction for multinomial distributions with the Greedy Cove
 
 ## Installation
 
-```bash
-pip install grecov
-```
-
 For the IPOPT optimizer (recommended for best results):
 
 ```bash
