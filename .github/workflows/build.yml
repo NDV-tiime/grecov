@@ -121,18 +121,3 @@ jobs:
 
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-
-  cran_submission:
-    name: Submit to CRAN
-    needs: [check_version]
-    if: needs.check_version.outputs.new_version == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Submit R package to CRAN
-        uses: coatless-actions/cran-submission@v1
-        with:
-          pkg-directory: 'r-package'
-          error-on: 'warning'
-          create-issue: true

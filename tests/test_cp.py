@@ -6,6 +6,11 @@ from scipy.stats import beta
 
 from grecov import confidence_interval
 
+try:
+    import cyipopt  # noqa: F401
+except ImportError:
+    pytest.skip("ipopt not available", allow_module_level=True)
+
 
 def clopper_pearson(x, n, alpha=0.05):
     """Clopper-Pearson exact binomial CI for proportion x/n."""
@@ -59,7 +64,7 @@ def test_equal_tail_matches_clopper_pearson(x, n, alpha, eps_ratio, tol):
         alpha=alpha,
         method="equal_tail",
         eps_ratio=eps_ratio,
-        use_python=True,
+        optimizer="ipopt",
     )
 
     assert result["lower"] == pytest.approx(cp_lower, abs=tol), (
