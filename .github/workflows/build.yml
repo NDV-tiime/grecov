@@ -119,5 +119,16 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Upload pyodide wheels to GitHub Release
+        run: |
+          for f in dist/*pyodide*.whl; do
+            [ -f "$f" ] && gh release upload ${{ needs.check_version.outputs.tag }} "$f"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Remove pyodide wheels before PyPI upload
+        run: rm -f dist/*pyodide*.whl
+
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
