@@ -101,6 +101,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "{wheels-*,sdist}"
+          merge-multiple: true
+
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
       - name: Create tag and release
         run: |
           git tag ${{ needs.check_version.outputs.tag }}
@@ -110,11 +119,3 @@ jobs:
             --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
