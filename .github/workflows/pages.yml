@@ -1,0 +1,43 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  pages: write
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pyodide wheel
+        uses: pypa/cibuildwheel@v2.23
+        env:
+          CIBW_PLATFORM: pyodide
+          CIBW_TEST_REQUIRES: "pytest"
+          CIBW_TEST_COMMAND: "pytest {project}/tests -q -k \"not coverage\""
+          CIBW_BUILD_VERBOSITY: 1
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp docs/index.html _site/
+          cp wheelhouse/*.whl _site/
+          echo "$(ls _site/*.whl | xargs -n1 basename)" > _site/wheel.txt
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

@@ -8,7 +8,6 @@ permissions:
   contents: write
   id-token: write
   issues: write
-  pages: write
 
 jobs:
   check_version:
@@ -61,8 +60,6 @@ jobs:
             runs-on: macos-latest
           - os: windows
             runs-on: windows-latest
-          - os: pyodide
-            runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +74,6 @@ jobs:
           CIBW_TEST_SKIP: "*-manylinux*"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.13"
-          CIBW_PLATFORM: ${{ matrix.os == 'pyodide' && 'pyodide' || '' }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,35 +92,6 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
-
-  deploy_pages:
-    name: Deploy Pages
-    needs: [build_wheels]
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: wheels-pyodide
-          path: _site
-
-      - name: Assemble site
-        run: |
-          cp docs/index.html _site/
-          # Write the wheel filename so the page can find it
-          echo "$(ls _site/*.whl | xargs -n1 basename)" > _site/wheel.txt
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
 
   publish:
     name: Publish
@@ -148,17 +115,6 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-
-      - name: Upload pyodide wheels to GitHub Release
-        run: |
-          for f in dist/*pyodide*.whl; do
-            [ -f "$f" ] && gh release upload ${{ needs.check_version.outputs.tag }} "$f"
-          done
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Remove pyodide wheels before PyPI upload
-        run: rm -f dist/*pyodide*.whl
 
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
