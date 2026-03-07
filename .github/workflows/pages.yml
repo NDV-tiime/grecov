@@ -19,19 +19,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Build pyodide wheel
-        uses: pypa/cibuildwheel@v2.23
-        env:
-          CIBW_PLATFORM: pyodide
-          CIBW_TEST_REQUIRES: "pytest"
-          CIBW_TEST_COMMAND: "pytest {project}/tests -q -k \"not coverage\""
-          CIBW_BUILD_VERBOSITY: 1
+        run: |
+          pip install pyodide-build
+          pyodide build
+
+      - name: Test
+        run: |
+          pip install pytest
+          pyodide venv .venv-pyodide
+          .venv-pyodide/bin/python -m pytest tests -q -k "not coverage"
 
       - name: Assemble site
         run: |
           mkdir _site
           cp docs/index.html _site/
-          cp wheelhouse/*.whl _site/
+          cp dist/*.whl _site/
           echo "$(ls _site/*.whl | xargs -n1 basename)" > _site/wheel.txt
 
       - uses: actions/upload-pages-artifact@v3
